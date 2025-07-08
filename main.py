@@ -41,7 +41,83 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("БОГ ПОМОЖЕТ!")
 
 async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 Here's the top for today!")
+    await update.message.reply_text("⏳ Calculating top stats for the day...")
+
+    results = []
+    for player in players:
+        steam_id = player.get('steam_id')
+        if not steam_id:
+            continue
+
+        matches = await fetch_matches(steam_id, 1)
+        if not matches:
+            continue
+
+        # Find best and worst match by KDA
+        best_match = None
+        worst_match = None
+        best_kda = -1
+        worst_kda = float('inf')
+
+        for m in matches:
+            kills = m.get("kills", 0)
+            deaths = m.get("deaths", 0)
+            assists = m.get("assists", 0)
+            kda = (kills + assists) / deaths if deaths != 0 else (kills + assists)
+            match_info = {
+                "player": player,
+                "match": m,
+                "kda": kda
+            }
+            if kda > best_kda:
+                best_kda = kda
+                best_match = match_info
+            if kda < worst_kda:
+                worst_kda = kda
+                worst_match = match_info
+
+        if best_match:
+            results.append({"type": "best", "data": best_match})
+        if worst_match:
+            results.append({"type": "worst", "data": worst_match})
+
+    # MVP (best KDA among all best matches)
+    mvp = max((r for r in results if r["type"] == "best"), key=lambda x: x["data"]["kda"], default=None)
+    # LOH (worst KDA among all worst matches)
+    loh = min((r for r in results if r["type"] == "worst"), key=lambda x: x["data"]["kda"], default=None)
+
+    def perf_str(info):
+        player = info["player"]
+        m = info["match"]
+        login = player.get("login") or player.get("name", "Unknown")
+        hero = m.get("hero_id", "Unknown")
+        win = (
+            (m.get("player_slot", 0) < 128 and m.get("radiant_win")) or
+            (m.get("player_slot", 0) >= 128 and not m.get("radiant_win"))
+        )
+        kills = m.get("kills", 0)
+        deaths = m.get("deaths", 0)
+        assists = m.get("assists", 0)
+        hero_damage = m.get("hero_damage", 0)
+        gpm = m.get("gold_per_min", 0)
+        return (
+            f"{login}, Hero: {hero}, {'WIN' if win else 'LOSE'}, "
+            f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}, "
+            f"HeroDMG: {hero_damage}, GPM: {gpm}"
+        )
+
+    msg = "🏆 Top Day Results:\n"
+    if mvp:
+        msg += f"\nMVP (Best KDA):\n{perf_str(mvp['data'])}"
+    else:
+        msg += "\nMVP (Best KDA): Not found"
+
+    if loh:
+        msg += f"\n\nLOH (Worst KDA):\n{perf_str(loh['data'])}"
+    else:
+        msg += "\n\nLOH (Worst KDA): Not found"
+
+    await update.message.reply_text(msg)
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
