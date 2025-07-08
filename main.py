@@ -1,4 +1,3 @@
-from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler
 from dotenv import load_dotenv
 import os
@@ -12,3 +11,6 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("top_day", top_day))
+    app.add_handler(CommandHandler("stats", stats_command))
+    print("Bot is running...")
+    app.run_polling()
