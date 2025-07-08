@@ -17,7 +17,7 @@ with open('data/players.json', 'r', encoding='utf-8') as f:
     players = json.load(f)
 with open('data/heroes.json', 'r', encoding='utf-8') as f:
     heroes = json.load(f)
-HERO_ID_TO_NAME = {h['id']: h['name'] for h in heroes}
+HERO_ID_TO_LOCALIZED = {h['id']: h['localized_name'] for h in heroes if 'id' in h and 'localized_name' in h}
 
 async def fetch_matches(steam_id, days):
     """Requests user matches for the last `days` days"""
@@ -99,7 +99,7 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             display_name = player.get("name", "Unknown")
         hero_id = m.get("hero_id", "Unknown")
-        hero = HERO_ID_TO_NAME.get(hero_id, f"HeroID:{hero_id}")
+        hero_name = HERO_ID_TO_LOCALIZED.get(hero_id, f"HeroID:{hero_id}")
         win = (
             (m.get("player_slot", 0) < 128 and m.get("radiant_win")) or
             (m.get("player_slot", 0) >= 128 and not m.get("radiant_win"))
@@ -107,12 +107,9 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kills = m.get("kills", 0)
         deaths = m.get("deaths", 0)
         assists = m.get("assists", 0)
-        hero_damage = m.get("hero_damage", 0)
-        gpm = m.get("gold_per_min", 0)
         return (
-            f"{display_name}, Hero: {hero}, {'WIN' if win else 'LOSE'}, "
-            f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}, "
-            f"HeroDMG: {hero_damage}, GPM: {gpm}"
+            f"{display_name}, Hero: {hero_name}, {'WIN' if win else 'LOSE'}, "
+            f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}"
         )
 
     msg = "🏆 Top Day Results:\n"
