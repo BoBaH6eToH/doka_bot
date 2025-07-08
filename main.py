@@ -15,10 +15,13 @@ OPENDOTA_API_KEY = os.getenv("OPENDOTA_API_KEY")
 
 with open('data/players.json', 'r', encoding='utf-8') as f:
     players = json.load(f)
+with open('data/heroes.json', 'r', encoding='utf-8') as f:
+    heroes = json.load(f)
+HERO_ID_TO_NAME = {h['id']: h['name'] for h in heroes}
 
 async def fetch_matches(steam_id, days):
     """Requests user matches for the last `days` days"""
-    url = f"https://api.opendota.com/api/players/{steam_id}/matches?api_key={OPENDOTA_API_KEY}"
+    url = f"https://api.opendota.com/api/players/{steam_id}/matches"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
@@ -89,8 +92,14 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     def perf_str(info):
         player = info["player"]
         m = info["match"]
-        login = player.get("login") or player.get("name", "Unknown")
-        hero = m.get("hero_id", "Unknown")
+        login = player.get("login", "")
+        # Use login if it starts with '@', otherwise use name
+        if login.startswith("@"):
+            display_name = login
+        else:
+            display_name = player.get("name", "Unknown")
+        hero_id = m.get("hero_id", "Unknown")
+        hero = HERO_ID_TO_NAME.get(hero_id, f"HeroID:{hero_id}")
         win = (
             (m.get("player_slot", 0) < 128 and m.get("radiant_win")) or
             (m.get("player_slot", 0) >= 128 and not m.get("radiant_win"))
@@ -101,7 +110,7 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hero_damage = m.get("hero_damage", 0)
         gpm = m.get("gold_per_min", 0)
         return (
-            f"{login}, Hero: {hero}, {'WIN' if win else 'LOSE'}, "
+            f"{display_name}, Hero: {hero}, {'WIN' if win else 'LOSE'}, "
             f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}, "
             f"HeroDMG: {hero_damage}, GPM: {gpm}"
         )
