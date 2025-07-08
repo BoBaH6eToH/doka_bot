@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
+import json
 import requests
 import os
 
@@ -9,6 +10,9 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 OPENDOTA_API_KEY = os.getenv("OPENDOTA_API_KEY")
+
+with open('data/players.json', 'r', encoding='utf-8') as f:
+    players = json.load(f)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("БОГ ПОМОЖЕТ!")
