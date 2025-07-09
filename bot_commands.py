@@ -1,8 +1,12 @@
 import json
+import os
+from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils import calc_kda
 from dota_api import fetch_matches
+
+TOP_DAY_CACHE_FILE = "data/top_day_cache.json"
 
 with open('data/players.json', 'r', encoding='utf-8') as f:
     players = json.load(f)
@@ -10,10 +14,31 @@ with open('data/heroes.json', 'r', encoding='utf-8') as f:
     heroes = json.load(f)
 HERO_ID_TO_LOCALIZED = {h['id']: h['localized_name'] for h in heroes if 'id' in h and 'localized_name' in h}
 
+def load_top_day_cache():
+    if not os.path.exists(TOP_DAY_CACHE_FILE):
+        return {}
+    with open(TOP_DAY_CACHE_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except Exception:
+            return {}
+
+def save_top_day_cache(data):
+    with open(TOP_DAY_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("БОГ ПОМОЖЕТ!")
 
 async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    cache = load_top_day_cache()
+    if today_str in cache:
+        await update.message.reply_text("⏳ Loading cached top stats for the day...")
+        msg = cache[today_str]
+        await update.message.reply_text(msg)
+        return
+
     await update.message.reply_text("⏳ Calculating top stats for the day...")
 
     results = []
@@ -77,9 +102,12 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kills = m.get("kills", 0)
         deaths = m.get("deaths", 0)
         assists = m.get("assists", 0)
+        gpm = m.get("gold_per_min", 0)
+        hero_damage = m.get("hero_damage", 0)
         return (
             f"{display_name}, Hero: {hero_name}, {'WIN' if win else 'LOSE'}, "
-            f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}"
+            f"Kills: {kills}, Deaths: {deaths}, Assists: {assists}, "
+            f"GPM: {gpm}, HeroDMG: {hero_damage}"
         )
 
     msg = "🏆 Top Day Results:\n"
@@ -93,15 +121,27 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg += "\n\nLOH (Worst KDA): Not found"
 
+    # Save result to cache
+    cache[today_str] = msg
+    save_top_day_cache(cache)
+
     await update.message.reply_text(msg)
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"DEBUG: context.args={context.args}")
+    
+    if not update.message or not update.message.from_user:
+        await update.effective_chat.send_message("⚠️ Can't identify your Telegram user.")
+        return
+
     if not context.args:
         await update.message.reply_text(
             "⚠️ Please specify period: day, week or month.\n"
             "Example: /stats week"
         )
         return
+
+    await update.message.reply_text(f"DEBUG: context.args={context.args}")
 
     period = context.args[0].lower()
     days_map = {"day": 1, "week": 7, "month": 30}
