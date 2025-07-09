@@ -17,3 +17,12 @@ async def fetch_matches(steam_id, days):
         if start_time >= cutoff and m.get("lobby_type") == 7:
             filtered.append(m)
     return filtered
+
+async def fetch_match_details(match_id):
+    """Fetch detailed match info by match_id"""
+    url = f"https://api.opendota.com/api/matches/{match_id}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json()

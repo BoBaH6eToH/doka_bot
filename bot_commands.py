@@ -4,28 +4,26 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils import calc_kda
-from dota_api import fetch_matches
+from dota_api import fetch_matches, fetch_match_details
 
 TOP_DAY_CACHE_FILE = "data/top_day_cache.json"
+
+def load_top_day_cache():
+    try:
+        with open(TOP_DAY_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_top_day_cache(data):
+    with open(TOP_DAY_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 with open('data/players.json', 'r', encoding='utf-8') as f:
     players = json.load(f)
 with open('data/heroes.json', 'r', encoding='utf-8') as f:
     heroes = json.load(f)
 HERO_ID_TO_LOCALIZED = {h['id']: h['localized_name'] for h in heroes if 'id' in h and 'localized_name' in h}
-
-def load_top_day_cache():
-    if not os.path.exists(TOP_DAY_CACHE_FILE):
-        return {}
-    with open(TOP_DAY_CACHE_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except Exception:
-            return {}
-
-def save_top_day_cache(data):
-    with open(TOP_DAY_CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("БОГ ПОМОЖЕТ!")
@@ -51,7 +49,6 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not matches:
             continue
 
-        # Find best and worst match by KDA
         best_match = None
         worst_match = None
         best_kda = -1
@@ -75,13 +72,30 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 worst_match = match_info
 
         if best_match:
+            # Fetch detailed stats for best match
+            match_id = best_match["match"].get("match_id")
+            details = await fetch_match_details(match_id)
+            if details:
+                for p in details.get("players", []):
+                    if str(p.get("account_id")) == str(player.get("steam_id")):
+                        best_match["match"]["gold_per_min"] = p.get("gold_per_min", 0)
+                        best_match["match"]["hero_damage"] = p.get("hero_damage", 0)
+                        break
             results.append({"type": "best", "data": best_match})
+
         if worst_match:
+            # Fetch detailed stats for worst match
+            match_id = worst_match["match"].get("match_id")
+            details = await fetch_match_details(match_id)
+            if details:
+                for p in details.get("players", []):
+                    if str(p.get("account_id")) == str(player.get("steam_id")):
+                        worst_match["match"]["gold_per_min"] = p.get("gold_per_min", 0)
+                        worst_match["match"]["hero_damage"] = p.get("hero_damage", 0)
+                        break
             results.append({"type": "worst", "data": worst_match})
 
-    # MVP (best KDA among all best matches)
     mvp = max((r for r in results if r["type"] == "best"), key=lambda x: x["data"]["kda"], default=None)
-    # LOH (worst KDA among all worst matches)
     loh = min((r for r in results if r["type"] == "worst"), key=lambda x: x["data"]["kda"], default=None)
 
     def perf_str(info):
@@ -121,15 +135,12 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg += "\n\nLOH (Worst KDA): Not found"
 
-    # Save result to cache
     cache[today_str] = msg
     save_top_day_cache(cache)
 
     await update.message.reply_text(msg)
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"DEBUG: context.args={context.args}")
-    
     if not update.message or not update.message.from_user:
         await update.effective_chat.send_message("⚠️ Can't identify your Telegram user.")
         return
@@ -140,8 +151,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Example: /stats week"
         )
         return
-
-    await update.message.reply_text(f"DEBUG: context.args={context.args}")
 
     period = context.args[0].lower()
     days_map = {"day": 1, "week": 7, "month": 30}
