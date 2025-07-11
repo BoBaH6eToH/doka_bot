@@ -152,6 +152,20 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     greedy = max(all_matches, key=lambda x: x["match"].get("gold_per_min", 0), default=None)
     damager = max(all_matches, key=lambda x: x["match"].get("hero_damage", 0), default=None)
 
+    # Nightfall award: all matches with 0 deaths and at least 1 kill
+    nightfall_matches = [
+        {"player": m["player"], "match": m["match"]}
+        for m in all_matches
+        if m["match"].get("deaths", 0) == 0 and m["match"].get("kills", 0) > 0
+    ]
+
+    # TimTim award: all matches with 0 kills
+    timtim_matches = [
+        {"player": m["player"], "match": m["match"]}
+        for m in all_matches
+        if m["match"].get("kills", 0) == 0
+    ]
+
     def short_perf_str(info, field):
         player = info["player"]
         m = info["match"]
@@ -200,6 +214,16 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg += "\n\nDamager (Highest HeroDMG):\n"
     msg += short_perf_str(damager, "hero_damage") if damager else "Not found"
+
+    msg += "\n\nNightfall award (Идеалыч 0 смертей):\n"
+    if nightfall_matches:
+        msg += "\n".join([short_perf_str(m, "kills") for m in nightfall_matches])
+    else:
+        msg += "Not found"
+
+    if timtim_matches:
+        msg += "\n\nTimTim award (0 kills):\n"
+        msg += "\n".join([short_perf_str(m, "deaths") for m in timtim_matches])    
 
     cache[today_str] = msg
     save_top_day_cache(cache)
