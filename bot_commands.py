@@ -4,7 +4,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils import calc_kda
-from dota_api import fetch_matches, fetch_match_details
+from dota_api import fetch_matches, fetch_match_details, fetch_matches_for_yesterday_msk
 
 TOP_DAY_CACHE_FILE = "data/top_day_cache.json"
 
@@ -40,12 +40,14 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Calculating top stats for the day...")
 
     results = []
+    all_matches = []  # For additional ratings
+
     for player in players:
         steam_id = player.get('steam_id')
         if not steam_id:
             continue
 
-        matches = await fetch_matches(steam_id, 1)
+        matches = await fetch_matches_for_yesterday_msk(steam_id)
         if not matches:
             continue
 
@@ -70,6 +72,25 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if kda < worst_kda:
                 worst_kda = kda
                 worst_match = match_info
+
+        # Fetch detailed stats for all matches for additional ratings
+        for m in matches:
+            match_id = m.get("match_id")
+            details = await fetch_match_details(match_id)
+            if details:
+                for p in details.get("players", []):
+                    if str(p.get("account_id")) == str(player.get("steam_id")):
+                        m["gold_per_min"] = p.get("gold_per_min", 0)
+                        m["hero_damage"] = p.get("hero_damage", 0)
+                        m["assists"] = p.get("assists", 0)
+                        m["kills"] = p.get("kills", 0)
+                        m["deaths"] = p.get("deaths", 0)
+                        m["hero_id"] = p.get("hero_id", m.get("hero_id"))
+                        all_matches.append({
+                            "player": player,
+                            "match": m
+                        })
+                        break
 
         if best_match:
             # Fetch detailed stats for best match
@@ -124,6 +145,36 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"GPM: {gpm}, HeroDMG: {hero_damage}"
         )
 
+    # Additional ratings
+    killer = max(all_matches, key=lambda x: x["match"].get("kills", 0), default=None)
+    miposhka = max(all_matches, key=lambda x: x["match"].get("assists", 0), default=None)
+    suicider = max(all_matches, key=lambda x: x["match"].get("deaths", 0), default=None)
+    greedy = max(all_matches, key=lambda x: x["match"].get("gold_per_min", 0), default=None)
+    damager = max(all_matches, key=lambda x: x["match"].get("hero_damage", 0), default=None)
+
+    def short_perf_str(info, field):
+        player = info["player"]
+        m = info["match"]
+        login = player.get("login", "")
+        if login.startswith("@"):
+            display_name = login
+        else:
+            display_name = player.get("name", "Unknown")
+        hero_id = m.get("hero_id", "Unknown")
+        hero_name = HERO_ID_TO_LOCALIZED.get(hero_id, f"HeroID:{hero_id}")
+        value = m.get(field, 0)
+        if field == "kills":
+            return f"{display_name}, Hero: {hero_name}, Kills: {value}"
+        if field == "assists":
+            return f"{display_name}, Hero: {hero_name}, Assists: {value}"
+        if field == "deaths":
+            return f"{display_name}, Hero: {hero_name}, Deaths: {value}"
+        if field == "gold_per_min":
+            return f"{display_name}, Hero: {hero_name}, GPM: {value}"
+        if field == "hero_damage":
+            return f"{display_name}, Hero: {hero_name}, HeroDMG: {value}"
+        return ""
+
     msg = "🏆 Top Day Results:\n"
     if mvp:
         msg += f"\nMVP (Best KDA):\n{perf_str(mvp['data'])}"
@@ -134,6 +185,21 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"\n\nLOH (Worst KDA):\n{perf_str(loh['data'])}"
     else:
         msg += "\n\nLOH (Worst KDA): Not found"
+
+    msg += "\n\nKiller (Most Kills):\n"
+    msg += short_perf_str(killer, "kills") if killer else "Not found"
+
+    msg += "\n\nMiposhka (Most Assists):\n"
+    msg += short_perf_str(miposhka, "assists") if miposhka else "Not found"
+
+    msg += "\n\nSuicider (Most Deaths):\n"
+    msg += short_perf_str(suicider, "deaths") if suicider else "Not found"
+
+    msg += "\n\nGreedy (Highest GPM):\n"
+    msg += short_perf_str(greedy, "gold_per_min") if greedy else "Not found"
+
+    msg += "\n\nDamager (Highest HeroDMG):\n"
+    msg += short_perf_str(damager, "hero_damage") if damager else "Not found"
 
     cache[today_str] = msg
     save_top_day_cache(cache)
