@@ -215,11 +215,9 @@ async def top_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg += "\n\nDamager (Highest HeroDMG):\n"
     msg += short_perf_str(damager, "hero_damage") if damager else "Not found"
 
-    msg += "\n\nNightfall award (Идеалыч 0 смертей):\n"
     if nightfall_matches:
-        msg += "\n".join([short_perf_str(m, "kills") for m in nightfall_matches])
-    else:
-        msg += "Not found"
+        msg += "\n\nNightfall award (Идеалыч 0 смертей):\n"
+        msg += "\n".join([short_perf_str(m, "kills") for m in nightfall_matches])    
 
     if timtim_matches:
         msg += "\n\nTimTim award (0 kills):\n"
