@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 data/players.json
+.vscode/
+.vscode-test/
+.vs/
+env/
